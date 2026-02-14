@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cookide DEX AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
+</head>
+<body class="auth-page">
+  <div class="modal-overlay">
+    <div class="modal auth-card">
+
+    <h2>Login</h2>
+    <p>Enter your email to continue</p>
+
+    <input type="email" id="emailInput" placeholder="you@example.com" required />
+    <button id="loginSubmit">Send Code</button>
+    <div id="authMsg" class="auth-msg"></div>
+  </div>
+
+  <script>
+    const btn = document.getElementById("loginSubmit");
+    const msg = document.getElementById("authMsg");
+
+    btn.onclick = async () => {
+      const email = document.getElementById("emailInput").value.trim();
+      if (!email) return;
+
+      msg.textContent = "Checking email…";
+
+      const res = await fetch("/api/send-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email })
+      });
+
+      const data = await res.json();
+      if (data.error) {
+        msg.textContent = "❌ " + data.error;
+      } else {
+        window.location.href = "/verify?email=" + encodeURIComponent(email);
+      }
+    };
+  </script>
+
+</body>
+</html>

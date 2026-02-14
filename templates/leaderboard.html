@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Cookie DEX AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
+</head>
+
+<body>
+<div class="page">
+
+
+
+
+
+  <!-- MOBILE USER POSITION BAR -->
+<div class="mobile-you-bar" id="mobileYouBar">
+  <div class="mobile-you-email">
+    {{ current_public_name or "Not logged in" }}
+  </div>
+  <div class="mobile-you-rank" id="mobileYouRank">—</div>
+</div>
+
+
+
+
+  <!-- LEFT -->
+  <div class="leaderboard-container">
+    <div class="header">
+      <h1>🏆 Global Leaderboard</h1>
+      <button class="back-btn" onclick="location.href='/'">← Back</button>
+    </div>
+
+    <div class="leaderboard" id="leaderboard">
+      {% for u in users %}
+      <div class="leader-row {% if u.email == current_email %}you{% endif %}"
+     data-id="{{ u.email }}"
+     data-rank="{{ loop.index }}">
+
+
+        <div class="rank">
+          {% if loop.index == 1 %}🥇
+          {% elif loop.index == 2 %}🥈
+          {% elif loop.index == 3 %}🥉
+          {% else %}#{{ loop.index }}{% endif %}
+        </div>
+
+<div class="email">{{ u.public_name }}</div>
+
+
+        <div class="pts">{{ u.points }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="side-panel">
+    <div class="you-box" id="youBox">
+      <h2>Your Position</h2>
+      <div class="you-email">
+  {{ current_public_name or "Not logged in" }}
+</div>
+
+      <div class="you-rank" id="youRank">—</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const leaderboard = document.getElementById("leaderboard");
+
+let lastPositions = {};
+let lastRanks = {};
+
+function snapshotState() {
+  lastPositions = {};
+  lastRanks = {};
+
+  document.querySelectorAll(".leader-row").forEach(el => {
+    const id = el.dataset.id;
+    lastPositions[id] = el.getBoundingClientRect().top;
+    lastRanks[id] = Number(el.dataset.rank);
+  });
+}
+
+function animateReorder() {
+  document.querySelectorAll(".leader-row").forEach(el => {
+    const id = el.dataset.id;
+    if (!(id in lastPositions)) return;
+
+    const oldTop = lastPositions[id];
+    const newTop = el.getBoundingClientRect().top;
+    const delta = oldTop - newTop;
+
+    const oldRank = lastRanks[id];
+    const newRank = Number(el.dataset.rank);
+
+    el.classList.remove("rank-up", "rank-down");
+
+    // 🔥 GLOW ONLY IF RANK NUMBER CHANGED
+    if (oldRank !== newRank) {
+      if (newRank < oldRank) el.classList.add("rank-up");
+      if (newRank > oldRank) el.classList.add("rank-down");
+    }
+
+    // smooth movement (ignore sub-pixel jitter)
+    if (Math.abs(delta) > 1) {
+      el.style.transform = `translateY(${delta}px)`;
+      el.style.transition = "transform 0s";
+
+      requestAnimationFrame(() => {
+        el.style.transition =
+          "transform 600ms cubic-bezier(.22,.61,.36,1)";
+        el.style.transform = "translateY(0)";
+      });
+    }
+
+    setTimeout(() => {
+      el.classList.remove("rank-up", "rank-down");
+    }, 1200);
+  });
+}
+
+async function refreshLeaderboard() {
+  snapshotState();
+
+  const res = await fetch("/leaderboard");
+  const html = await res.text();
+  const doc = new DOMParser().parseFromString(html, "text/html");
+
+  leaderboard.innerHTML =
+    doc.getElementById("leaderboard").innerHTML;
+
+  animateReorder();
+  updateUserRank();
+}
+
+function updateUserRank() {
+  const you = document.querySelector(".leader-row.you");
+  if (!you) return;
+
+  const rank = "#" + you.dataset.rank;
+
+  const desktopRank = document.getElementById("youRank");
+  if (desktopRank) desktopRank.innerText = rank;
+
+  const mobileRank = document.getElementById("mobileYouRank");
+  if (mobileRank) mobileRank.innerText = rank;
+}
+
+refreshLeaderboard();
+setInterval(refreshLeaderboard, 4000);
+</script>
+
+
+
+</body>
+</html>

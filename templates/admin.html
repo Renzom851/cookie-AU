@@ -1,0 +1,10 @@
+<h2>Admin Dashboard</h2>
+<table>
+  <tr><th>Email</th><th>Points</th></tr>
+  {% for u in users %}
+  <tr>
+    <td>{{ u.email }}</td>
+    <td>{{ u.points }}</td>
+  </tr>
+  {% endfor %}
+</table>

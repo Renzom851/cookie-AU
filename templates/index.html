@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Cookie DEX AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
+</head>
+<body>
+
+
+
+<!-- Splash Screen -->
+<div id="splashScreen">
+  <img src="{{ url_for('static', filename='logo.png') }}" alt="Cookie DEX Logo" class="splash-logo">
+  <div class="splash-text">Cookie DEX</div>
+</div>
+
+
+
+
+
+
+
+
+
+
+  <aside class="sidebar" id="sidebar">
+    <div id="sidebarBackdrop" class="sidebar-backdrop"></div>
+
+    <div class="sidebar-top">
+      <div class="sidebar-brand">
+        <img src="{{ url_for('static', filename='logo.png') }}" class="side-logo" alt="logo">
+        <div class="side-title">Cookie DEX AI</div>
+      </div>
+      <button id="newChatBtn" class="new-chat">＋ New Chat</button>
+      <div class="sidebar-toggle" id="collapseBtn">☰</div>
+    </div>
+
+    <div class="sidebar-sections">
+      <div class="section">
+        <div class="section-title">Starred</div>
+        <div id="starredList" class="list"></div>
+      </div>
+      <div class="section">
+        <div class="section-title">Recent</div>
+        <div id="recentList" class="list"></div>
+      </div>
+    </div>
+
+
+<div class="sidebar-bottom" id="authArea">
+
+  <!-- LOGGED OUT -->
+  <button class="login-btn" id="loginBtn">Login</button>
+
+  <!-- LOGGED IN -->
+  <div class="account-card hidden" id="accountCard">
+    <div class="account-top" id="accountToggle">
+      <div class="account-email" id="accountEmail"></div>
+      <div class="account-menu-btn">⋮</div>
+    </div>
+ 
+     <div class="account-dropdown" id="accountDropdown">
+      <button id="pointsBtn">🪙 Points</button>
+      <button id="leaderboardBtn">🏆 Leaderboard</button>
+      <button id="settingsBtn">⚙️ Settings</button>
+      <button class="logout" id="logoutBtn">🚪 Log out</button>
+    </div>
+  </div>
+
+</div>
+
+
+  </aside>
+
+  <main class="main" id="mainArea">
+    <header class="topbar">
+
+      <button id="mobileSidebarBtn" class="mobile-sidebar-btn">☰</button>
+
+      <div class="model-row">
+        <div class="custom-dropdown" id="modelDropdown">
+          {% set first_key = models.keys()|list|first %}
+          {% set first_info = models[first_key] %}
+          <div class="selected" data-value="{{ first_key }}">
+            <img src="{{ first_info.icon }}" class="dropdown-icon" onerror="this.style.display='none'">
+            <span id="selectedModelText">{{ first_info.label if first_info.label is defined else (first_key.replace('/', ' ').replace('-', ' ').title()) }}</span>
+            <span class="arrow">▾</span>
+          </div>
+          
+
+
+
+<div class="dropdown-options">
+
+  <!-- Tabs -->
+  <div class="model-tabs">
+    <button class="model-tab active" data-tab="Text">Text</button>
+    <button class="model-tab" data-tab="Image">Image</button>
+    <button class="model-tab" data-tab="Video">Video</button>
+  </div>
+
+  <!-- Panels -->
+  {% for type in ['Text','Image','Video'] %}
+  <div class="model-panel {% if type == 'Text' %}active{% endif %}" data-panel="{{ type }}">
+    {% for key, info in models.items() if info.type == type %}
+      <div class="dropdown-option" data-value="{{ key }}">
+        <img src="{{ info.icon }}" class="dropdown-icon" onerror="this.style.display='none'">
+        <span>{{ info.label }}</span>
+      </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+</div>
+
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+    </header>
+
+    <div class="container">
+      <div class="chat-card">
+        <img src="{{ url_for('static', filename='logo.png') }}" id="assistantFloat" class="assistant-float" alt="assistant">
+        <div class="model-display-compact">
+          <div id="sessionTitle" class="session-title">New Chat</div>
+        </div>
+        <div class="chat-box" id="chatBox"></div>
+        <div class="input-row">
+          <div class="input-left">
+            <textarea id="promptInput" placeholder="Write your message..."></textarea>
+          </div>
+          <div class="input-right">
+            <button id="sendBtn" class="send-btn">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+
+
+
+<!-- Modal for Rename / Delete Confirmation -->
+<div id="sessionModal" class="session-modal hidden">
+  <div class="modal-content">
+    <div id="modalTitle" class="modal-title"></div>
+    <input type="text" id="modalInput" class="modal-input" placeholder="Type new name..." />
+    <div class="modal-buttons">
+      <button id="modalCancelBtn" class="modal-btn cancel">Cancel</button>
+      <button id="modalConfirmBtn" class="modal-btn confirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
+
+
+
+{% if daily_completed %}
+<div class="daily-popup">
+  🎉 Daily Session Completed!
+</div>
+<script>
+  setTimeout(() => {
+    document.querySelector(".daily-popup").remove();
+  }, 4000);
+  
+</script>
+{% endif %}
+
+
+
+  <script>
+/* --- Globals & Storage --- */
+const AVAILABLE_MODELS = {{ models|tojson }};
+const STORAGE_KEY = "cookie_dex_ai_sessions_v1";
+let store = { sessions: {}, meta: { order: [], lastOpen: null, lastModel: null } };
+let activeSessionId = null;
+
+/* --- Elements --- */
+const sidebar = document.getElementById("sidebar");
+const newChatBtn = document.getElementById("newChatBtn");
+const collapseBtn = document.getElementById("collapseBtn");
+const starredList = document.getElementById("starredList");
+const recentList = document.getElementById("recentList");
+const modelDropdown = document.getElementById("modelDropdown");
+const selectedEl = modelDropdown.querySelector(".selected");
+const selectedText = document.getElementById("selectedModelText");
+const chatBox = document.getElementById("chatBox");
+const promptInput = document.getElementById("promptInput");
+const sendBtn = document.getElementById("sendBtn");
+const sessionTitleEl = document.getElementById("sessionTitle");
+const assistantFloat = document.getElementById("assistantFloat");
+let typingBubble = null;
+
+
+
+function showDailyPopup() {
+    const popup = document.createElement("div");
+    popup.className = "daily-popup-live";
+    popup.innerText = "🎉 Daily Session Completed!";
+
+    document.body.appendChild(popup);
+
+    setTimeout(() => {
+        popup.remove();
+    }, 4000);
+}
+
+
+
+
+
+
+
+/* --- Helpers --- */
+function uid() { return "s_" + Math.random().toString(36).slice(2, 9); }
+function now() { return Date.now(); }
+function saveStore() { localStorage.setItem(STORAGE_KEY, JSON.stringify(store)); }
+function loadStore() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) store = JSON.parse(raw);
+  } catch(e){ console.warn(e); }
+}
+
+function createNewSession() {
+  activeSessionId = null;
+  chatBox.innerHTML = "";
+  renderEmptyChat();
+  sessionTitleEl.textContent = "New Chat";
+  setTimeout(() => promptInput.focus(), 50);
+}
+
+/* --- Sidebar / Session --- */
+function toggleStar(id){
+  const s = store.sessions[id];
+  s.starred = !s.starred;
+  s.updatedAt = now();
+  saveStore();
+  renderSidebar();
+}
+
+function deleteSession(id){
+  delete store.sessions[id];
+  store.meta.order = store.meta.order.filter(x => x !== id);
+  if(store.meta.lastOpen === id) store.meta.lastOpen = store.meta.order[0] || null;
+  activeSessionId = store.meta.lastOpen;
+  saveStore();
+  renderSidebar();
+  activeSessionId ? loadSessionToUI(activeSessionId) : renderEmptyChat();
+}
+
+function renderListItem(session){
+  const el = document.createElement("div");
+  el.className = "sidebar-item";
+  el.dataset.id = session.id;
+
+  const wrap = document.createElement("div");
+  wrap.className = "sidebar-item-wrap";
+
+  const star = document.createElement("span");
+  star.textContent = session.starred ? "⭐" : "☆";
+  star.className = "star-btn";
+  star.onclick = e => { e.stopPropagation(); toggleStar(session.id); };
+
+  const title = document.createElement("div");
+  title.className = "item-title";
+  title.textContent = session.title;
+
+  wrap.appendChild(star);
+  wrap.appendChild(title);
+
+  const actionBtn = document.createElement("span");
+  actionBtn.textContent = "⋮";
+  actionBtn.className = "action-btn";
+
+  const menu = document.createElement("div");
+  menu.className = "session-menu";
+  menu.style.display = "none";
+
+  const renameOption = document.createElement("div");
+  renameOption.className = "rename";
+  renameOption.textContent = "Rename";
+  renameOption.onclick = e => { e.stopPropagation(); openModal("rename", session.id); menu.style.display = "none"; };
+
+  const deleteOption = document.createElement("div");
+  deleteOption.className = "delete";
+  deleteOption.textContent = "Delete";
+  deleteOption.onclick = e => { e.stopPropagation(); openModal("delete", session.id); menu.style.display = "none"; };
+
+  menu.appendChild(renameOption);
+  menu.appendChild(deleteOption);
+
+  function closeAllMenus() {
+    document.querySelectorAll(".session-menu").forEach(m => m.style.display = "none");
+  }
+
+  actionBtn.onclick = e => {
+    e.stopPropagation();
+    const isOpen = menu.style.display === "block";
+    closeAllMenus();
+    if(!isOpen) menu.style.display = "block";
+  };
+  menu.onclick = e => {
+  e.stopPropagation();
+};
+
+
+  el.appendChild(wrap);
+  el.appendChild(actionBtn);
+  el.appendChild(menu);
+
+  el.onclick = () => switchToSession(session.id);
+
+  return el;
+}
+
+function renderSidebar(){
+  starredList.innerHTML = "";
+  recentList.innerHTML = "";
+  Object.values(store.sessions)
+    .filter(s => s.starred)
+    .sort((a,b)=>b.updatedAt - a.updatedAt)
+    .forEach(s => starredList.appendChild(renderListItem(s)));
+  store.meta.order.forEach(id => {
+    const s = store.sessions[id];
+    if(!s || s.starred) return;
+    recentList.appendChild(renderListItem(s));
+  });
+  document.querySelectorAll(".sidebar-item").forEach(item =>
+    item.classList.toggle("active", item.dataset.id === activeSessionId)
+  );
+}
+
+function renderEmptyChat(){
+  chatBox.innerHTML = `<div class="chat-placeholder">🍪 Start chatting…</div>`;
+}
+
+/* --- Messages --- */
+function createMessageElement(msg){
+  const el = document.createElement("div");
+  el.className = "msg-wrap " + (msg.role==="user" ? "from-user" : "from-assistant");
+
+  const bubble = document.createElement("div");
+  bubble.className = "msg-bubble";
+
+  if(msg.role==="assistant" && msg.model_name){
+    const m = document.createElement("div");
+    m.className = "model-label";
+    m.textContent = msg.model_name;
+    bubble.appendChild(m);
+  }
+
+  if(msg.is_image){
+    if(!msg.content){
+      const err = document.createElement("div");
+      err.textContent = "⚠ (image not returned)";
+      bubble.appendChild(err);
+    } else {
+      const img = document.createElement("img");
+      img.src = msg.content;
+      img.className = "msg-image";
+      img.onerror = () => { bubble.innerHTML = "<div>⚠ Image failed to load</div>"; };
+      bubble.appendChild(img);
+    }
+  } else {
+    const text = document.createElement("div");
+    text.className = "msg-text";
+    text.textContent = msg.content || "";
+    bubble.appendChild(text);
+  }
+
+  el.appendChild(bubble);
+
+  const meta = document.createElement("div");
+  meta.className = "msg-meta";
+  meta.textContent = new Date(msg.ts).toLocaleTimeString();
+  el.appendChild(meta);
+
+  return el;
+}
+
+function appendMessage(msg){
+  // Create session on first user message
+  if(!activeSessionId && msg.role==="user"){
+    const id = uid();
+    const ts = now();
+    const modelKey = selectedEl.dataset.value || Object.keys(AVAILABLE_MODELS)[0];
+    store.sessions[id] = {
+      id,
+      title: msg.content.slice(0,30) || "New Chat",
+      createdAt: ts,
+      updatedAt: ts,
+      starred: false,
+      messages: [],
+      modelKey
+    };
+    store.meta.order.unshift(id);
+    store.meta.lastOpen = id;
+    activeSessionId = id;
+    saveStore();
+    renderSidebar();
+    sessionTitleEl.textContent = store.sessions[id].title;
+  }
+
+  const s = store.sessions[activeSessionId];
+  if(!s) return;
+
+  s.messages.push(msg);
+  s.updatedAt = now();
+  if(msg.role==="user" && s.title==="New Chat"){
+    s.title = msg.content.slice(0,30) || "New Chat";
+    sessionTitleEl.textContent = s.title;
+  }
+  saveStore();
+
+  const el = createMessageElement(msg);
+  chatBox.appendChild(el);
+  chatBox.scrollTop = chatBox.scrollHeight;
+
+  return el;
+}
+
+function typeWriter(elementTextNode, text, speed=18){
+  let i = 0;
+  return new Promise(resolve => {
+    function step(){
+      if(i <= text.length){
+        elementTextNode.textContent = text.slice(0,i);
+        i++;
+        setTimeout(step, speed);
+      } else resolve();
+    }
+    step();
+  });
+}
+
+function showTypingBubble(messageText){
+  typingBubble = document.createElement("div");
+  typingBubble.className = "typing-bubble";
+  typingBubble.innerHTML = `
+    <img src="{{ url_for('static', filename='logo.png') }}" class="cookie-typing">
+    <span class="typing-text">${messageText}</span>
+  `;
+  chatBox.appendChild(typingBubble);
+  chatBox.scrollTop = chatBox.scrollHeight;
+  assistantFloat.classList.add("talking");
+  sendBtn.disabled = true;
+  promptInput.disabled = true;
+}
+
+function hideTypingBubble(){
+  if(typingBubble) typingBubble.remove();
+  typingBubble = null;
+  assistantFloat.classList.remove("talking");
+  sendBtn.disabled = false;
+  promptInput.disabled = false;
+}
+
+
+
+
+
+
+/* --- Model Tabs Logic --- */
+const tabs = modelDropdown.querySelectorAll(".model-tab");
+const panels = modelDropdown.querySelectorAll(".model-panel");
+
+tabs.forEach(tab => {
+  tab.addEventListener("click", e => {
+    e.stopPropagation();
+
+    const target = tab.dataset.tab;
+
+    // activate tab
+    tabs.forEach(t => t.classList.toggle("active", t === tab));
+
+    // activate panel
+    panels.forEach(p => {
+  const isActive = p.dataset.panel === target;
+  p.classList.toggle("active", isActive);
+  if (isActive) p.scrollTop = 0; // ← ADD THIS LINE
+});
+
+
+    // AUTO SELECT first model in tab if none selected
+    const activePanel = modelDropdown.querySelector(`.model-panel[data-panel="${target}"]`);
+    if (activePanel) {
+      const firstOption = activePanel.querySelector(".dropdown-option");
+      if (firstOption && !selectedEl.dataset.value) {
+        firstOption.click();
+      }
+    }
+  });
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* --- Send Prompt --- */
+async function sendPrompt(prompt){
+  const s = store.sessions[activeSessionId] || {};
+  const modelKey = s.modelKey || selectedEl.dataset.value || Object.keys(AVAILABLE_MODELS)[0];
+  const modelInfo = AVAILABLE_MODELS[modelKey] || {};
+  const modelType = modelInfo.type || "Text";
+
+  let loadingText = "Thinking…";
+  if(modelType==="Image") loadingText = " Baking image pixels…";
+  if(modelType==="Video") loadingText = " Mixing video frames…";
+
+  showTypingBubble(loadingText);
+
+  try {
+    const res = await fetch("/route", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({model:modelKey,prompt})
+    });
+    const data = await res.json();
+
+    if (data.daily_completed) {
+    showDailyPopup();
+}
+
+    hideTypingBubble();
+
+
+
+
+
+    if(data.error){
+      appendMessage({
+        role:"assistant",
+        content:"⚠ "+data.error,
+        is_image:false,
+        ts:now(),
+        model_name:modelInfo.label || modelKey.replace(/[-\/]/g," ").toUpperCase()
+      });
+      return;
+    }
+
+    if(data.is_image){
+      const tempMsg = {
+        role:"assistant",
+        content:loadingText,
+        is_image:false,
+        ts:now(),
+        model_name:modelInfo.label || modelKey.replace(/[-\/]/g," ").toUpperCase()
+      };
+      const el = appendMessage(tempMsg);
+      const imgSrc = data.response || "";
+      setTimeout(()=>{
+        const bubble = el.querySelector(".msg-bubble");
+        if(!imgSrc){
+          bubble.innerHTML = "<div>⚠ Image not returned</div>";
+        } else {
+          bubble.innerHTML = "";
+          const m = document.createElement("div");
+          m.className = "model-label";
+          m.textContent = tempMsg.model_name;
+          bubble.appendChild(m);
+          const img = document.createElement("img");
+          img.src = imgSrc;
+          img.className = "msg-image";
+          img.onerror = ()=>{ bubble.innerHTML = "<div>⚠ Image failed to load</div>"; };
+          bubble.appendChild(img);
+        }
+        chatBox.scrollTop = chatBox.scrollHeight;
+      },350);
+      return;
+    }
+
+    // Text message
+    const assistantMsg = {
+      role:"assistant",
+      content:"",
+      is_image:false,
+      ts:now(),
+      model_name:modelInfo.label || modelKey.replace(/[-\/]/g," ").toUpperCase()
+    };
+    const el = appendMessage(assistantMsg);
+    const textNode = el.querySelector(".msg-text");
+    const finalText = data.response || "";
+    await typeWriter(textNode, finalText, 14);
+
+    // Update stored message
+    const s2 = store.sessions[activeSessionId];
+    if(s2 && s2.messages && s2.messages.length){
+      for(let i=s2.messages.length-1;i>=0;i--){
+        if(s2.messages[i].role==="assistant"){
+          s2.messages[i].content = finalText;
+          break;
+        }
+      }
+      s2.updatedAt = now();
+      saveStore();
+    }
+
+  } catch(err){
+    hideTypingBubble();
+    appendMessage({
+      role:"assistant",
+      content:"⚠ Network Error",
+      is_image:false,
+      ts:now(),
+      model_name:modelInfo.label || modelKey.replace(/[-\/]/g," ").toUpperCase()
+    });
+  }
+}
+
+/* --- UI Events --- */
+sendBtn.onclick = ()=>{
+  const prompt = promptInput.value.trim();
+  if(!prompt) return;
+  appendMessage({role:"user",content:prompt,is_image:false,ts:now()});
+  promptInput.value = "";
+  sendPrompt(prompt);
+};
+
+promptInput.addEventListener("keydown", e=>{
+  if(sendBtn.disabled) return;
+  if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); sendBtn.click(); }
+});
+
+newChatBtn.addEventListener("click", e=>{
+  e.stopPropagation();
+  createNewSession();
+  if(window.innerWidth <= 768) sidebar.classList.remove("open");
+});
+
+collapseBtn.addEventListener("click", ()=> sidebar.classList.toggle("collapsed"));
+
+
+
+
+
+
+
+
+
+/* --- Mobile Sidebar --- */
+const mobileSidebarBtn = document.getElementById("mobileSidebarBtn");
+const backdrop = document.getElementById("sidebarBackdrop");
+
+function openSidebar() {
+  sidebar.classList.add("open");
+}
+
+function closeSidebar() {
+  sidebar.classList.remove("open");
+}
+
+/* Toggle via hamburger */
+mobileSidebarBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  sidebar.classList.toggle("open");
+});
+
+/* Prevent sidebar clicks from closing it */
+sidebar.addEventListener("click", (e) => {
+  e.stopPropagation();
+});
+
+/* Backdrop click closes sidebar */
+backdrop.addEventListener("click", closeSidebar);
+
+
+
+/* Swipe gestures */
+let touchStartX = 0;
+let touchEndX = 0;
+const SWIPE_THRESHOLD = 70;
+
+document.addEventListener("touchstart", (e) => {
+  if (e.touches.length === 1) {
+    touchStartX = e.touches[0].clientX;
+  }
+}, { passive: true });
+
+document.addEventListener("touchmove", (e) => {
+  if (e.touches.length === 1) {
+    touchEndX = e.touches[0].clientX;
+  }
+}, { passive: true });
+
+document.addEventListener("touchend", () => {
+  const swipeDistance = touchEndX - touchStartX;
+
+  /* Swipe right → open */
+  if (swipeDistance > SWIPE_THRESHOLD && touchStartX < 40) {
+    openSidebar();
+  }
+
+  /* Swipe left → close */
+  if (swipeDistance < -SWIPE_THRESHOLD && sidebar.classList.contains("open")) {
+    closeSidebar();
+  }
+
+  touchStartX = 0;
+  touchEndX = 0;
+});
+
+
+
+
+/* --- Model Dropdown --- */
+const options = modelDropdown.querySelector(".dropdown-options");
+
+function updateActiveModel(value){
+  options.querySelectorAll(".dropdown-option").forEach(o=> o.classList.toggle("active", o.dataset.value===value));
+}
+
+selectedEl.addEventListener("click", e=>{
+  e.stopPropagation();
+  modelDropdown.classList.toggle("open");
+});
+
+
+
+options.querySelectorAll(".dropdown-option").forEach(opt=>{
+  opt.addEventListener("click", (e)=>{
+  
+
+
+
+
+
+
+
+    const value = opt.dataset.value;
+    selectedEl.dataset.value = value;
+    selectedText.textContent = opt.textContent.trim();
+    const img = selectedEl.querySelector("img");
+    if(img && opt.querySelector("img")){
+      img.src = opt.querySelector("img").src;
+      img.style.display = "";
+    }
+    updateActiveModel(value);
+    if(activeSessionId && store.sessions[activeSessionId]){
+      store.sessions[activeSessionId].modelKey = value;
+      store.sessions[activeSessionId].updatedAt = now();
+      saveStore();
+    }
+    modelDropdown.classList.remove("open");
+  });
+});
+
+/* --- Sidebar Click Prevention --- */
+sidebar.addEventListener("click", e => e.stopPropagation());
+document.addEventListener("mousedown", (e) => {
+  /* If click is inside sidebar, do NOTHING */
+  if (sidebar.contains(e.target)) return;
+
+  /* Otherwise close session menus */
+  document.querySelectorAll(".session-menu").forEach(menu => {
+    menu.style.display = "none";
+  });
+
+  /* Mobile-only: close sidebar when clicking outside */
+  if (window.innerWidth <= 768 && sidebar.classList.contains("open")) {
+    closeSidebar();
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+/* --- Session Switching --- */
+function switchToSession(id){
+  loadSessionToUI(id);
+  const s = store.sessions[id];
+  if(s){
+    selectedEl.dataset.value = s.modelKey || selectedEl.dataset.value;
+    selectedText.textContent = (s.modelKey || "").replace(/[-\/]/g," ").toUpperCase();
+    updateActiveModel(selectedEl.dataset.value);
+  }
+}
+
+function loadSessionToUI(id){
+  activeSessionId = id;
+  store.meta.lastOpen = id;
+  saveStore();
+  chatBox.innerHTML = "";
+  const s = store.sessions[id];
+  sessionTitleEl.textContent = s.title || "New Chat";
+  if(!s.messages || !s.messages.length){ renderEmptyChat(); return; }
+  s.messages.forEach(m => chatBox.appendChild(createMessageElement(m)));
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+/* --- Modals --- */
+const sessionModal = document.getElementById("sessionModal");
+const modalTitle = document.getElementById("modalTitle");
+const modalInput = document.getElementById("modalInput");
+const modalCancelBtn = document.getElementById("modalCancelBtn");
+const modalConfirmBtn = document.getElementById("modalConfirmBtn");
+let currentSessionAction = null;
+
+function openModal(type, sessionId){
+  currentSessionAction = { type, sessionId };
+  if(type==="rename"){
+    modalTitle.textContent = "Rename Chat";
+    modalInput.value = store.sessions[sessionId].title;
+    modalInput.style.display = "block";
+    modalConfirmBtn.textContent = "Rename";
+    modalConfirmBtn.classList.remove("delete");
+    const existingDesc = document.querySelector(".modal-desc"); if(existingDesc) existingDesc.remove();
+  } else if(type==="delete"){
+    modalTitle.textContent = "Delete Chat?";
+    modalInput.style.display = "none";
+    modalConfirmBtn.textContent = "Confirm";
+    modalConfirmBtn.classList.add("delete");
+    const existingDesc = document.querySelector(".modal-desc"); if(existingDesc) existingDesc.remove();
+    const desc = document.createElement("div");
+    desc.className = "modal-desc";
+    desc.textContent = "Are you sure you want to delete this chat? This action cannot be undone.";
+    modalConfirmBtn.parentElement.insertBefore(desc, modalConfirmBtn);
+  }
+  sessionModal.classList.remove("hidden");
+  modalInput.focus();
+}
+
+function closeModal(){ sessionModal.classList.add("hidden"); currentSessionAction = null; }
+modalCancelBtn.onclick = closeModal;
+modalConfirmBtn.onclick = ()=>{
+  if(!currentSessionAction) return;
+  const s = store.sessions[currentSessionAction.sessionId];
+  if(currentSessionAction.type==="rename" && s){
+    const newName = modalInput.value.trim();
+    if(newName){ s.title = newName.slice(0,30); saveStore(); renderSidebar(); }
+  }
+  if(currentSessionAction.type==="delete"){ deleteSession(currentSessionAction.sessionId); }
+  closeModal();
+};
+
+/* --- Init --- */
+loadStore();
+renderAuthArea();
+
+if(!store.meta.lastOpen){ renderSidebar(); renderEmptyChat(); }
+else { renderSidebar(); loadSessionToUI(store.meta.lastOpen); }
+
+/* --- Initialize dropdown on page load --- */
+(function initDropdownActive(){
+  const initialModel = store.meta.lastModel || selectedEl.dataset.value || Object.keys(AVAILABLE_MODELS)[0];
+  selectedEl.dataset.value = initialModel;
+  selectedText.textContent = AVAILABLE_MODELS[initialModel]?.label || initialModel.replace(/[-\/]/g," ").toUpperCase();
+  const img = selectedEl.querySelector("img");
+  if(img && AVAILABLE_MODELS[initialModel]?.icon){ img.src = AVAILABLE_MODELS[initialModel].icon; img.style.display = ""; }
+  updateActiveModel(initialModel);
+  if(activeSessionId && store.sessions[activeSessionId]){
+    store.sessions[activeSessionId].modelKey = initialModel;
+    store.sessions[activeSessionId].updatedAt = now();
+  }
+  store.meta.lastModel = initialModel;
+  saveStore();
+})();
+
+/* --- Splash Screen --- */
+window.addEventListener("load", ()=>{
+  const splash = document.getElementById("splashScreen");
+  setTimeout(()=>{
+    splash.classList.add("hide");
+    splash.addEventListener("transitionend", ()=> splash.remove(), { once:true });
+  },1500);
+});
+
+
+
+
+
+
+async function renderAuthArea() {
+  const authArea = document.getElementById("authArea");
+  if (!authArea) return;
+
+  const user = await fetchUser();
+
+  /* LOGGED OUT */
+  if (!user) {
+    authArea.innerHTML = `
+      <button class="login-btn" id="loginBtn">Login</button>
+    `;
+    document.getElementById("loginBtn").onclick = () => {
+      window.location.href = "/login";
+    };
+    return;
+  }
+
+  /* LOGGED IN */
+  authArea.innerHTML = `
+    <div class="account-card" id="accountCard">
+      <div class="account-top" id="accountToggle">
+        <div class="account-email">${user.email}</div>
+        <div class="account-menu-btn">⋮</div>
+      </div>
+
+      <div class="account-dropdown" id="accountDropdown">
+        <button id="pointsBtn">🪙 Points</button>
+        <button id="leaderboardBtn">🏆 Leaderboard</button>
+        <button id="settingsBtn">⚙️ Settings</button>
+        <button class="logout" id="logoutBtn">🚪 Log out</button>
+      </div>
+    </div>
+  `;
+
+const card = document.getElementById("accountCard");
+const toggle = document.getElementById("accountToggle");
+
+toggle.onclick = (e) => {
+  e.stopPropagation();
+  card.classList.toggle("open");
+};
+
+document.addEventListener("click", () => {
+  card.classList.remove("open");
+});
+
+
+  document.getElementById("pointsBtn").onclick = () => {
+    window.location.href = "/points";
+  };
+
+  document.getElementById("leaderboardBtn").onclick = () => {
+    window.location.href = "/leaderboard";
+  };
+
+  document.getElementById("settingsBtn").onclick = () => {
+    alert("Settings coming soon 👀");
+  };
+
+  document.getElementById("logoutBtn").onclick = async () => {
+    await fetch("/logout", { method: "POST" });
+    location.reload();
+  };
+
+  document.addEventListener("click", () => {
+    dropdown.classList.add("hidden");
+  });
+}
+
+
+  // prevent overflow bottom
+  if (top + menuRect.height > window.innerHeight) {
+    top = rect.top - menuRect.height - 8;
+  }
+
+  // prevent overflow left
+  if (left < 8) {left = 8;
+
+  menu.style.top = `${top}px`;
+  menu.style.left = `${left}px`;
+};
+
+
+async function fetchUser() {
+  try {
+    const res = await fetch("/api/me");
+    const data = await res.json();
+    return data.user;
+  } catch {
+    return null;
+  }
+}
+
+
+ 
+
+
+
+</script>

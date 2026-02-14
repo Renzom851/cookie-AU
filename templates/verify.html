@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Cookie DEX AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
+</head>
+<body class="auth-page">
+  <div class="modal-overlay">
+    <div class="modal auth-card">
+
+    <h2>Verify Code</h2>
+    <p>Enter the 6-digit code sent to your email</p>
+  
+    <p id="countdown" class="otp-timer">Checking code expiry…</p>
+
+
+
+   <div class="verify-boxes" id="otpBoxes">
+  <input maxlength="1" inputmode="numeric">
+  <input maxlength="1" inputmode="numeric">
+  <input maxlength="1" inputmode="numeric">
+  <input maxlength="1" inputmode="numeric">
+  <input maxlength="1" inputmode="numeric">
+  <input maxlength="1" inputmode="numeric">
+</div>
+
+<button class="verify-btn" id="verifyBtn">Verify</button>
+<div id="verifyMsg"></div>
+
+
+    
+  </div>
+
+ <script>
+const params = new URLSearchParams(window.location.search);
+const email = params.get("email");
+
+const inputs = document.querySelectorAll("#otpBoxes input");
+const verifyBtn = document.getElementById("verifyBtn");
+const msgDiv = document.getElementById("verifyMsg");
+const boxWrap = document.getElementById("otpBoxes");
+const timerEl = document.getElementById("countdown");
+
+// -------------------------
+// OTP Expiry Countdown
+// -------------------------
+const otpExpiresAt = {{ expires_at_ts | default(0) | safe }};
+let otpInterval;
+
+if (otpExpiresAt && !isNaN(otpExpiresAt)) {
+  otpInterval = setInterval(() => {
+    const diff = otpExpiresAt - Date.now();
+    if (diff <= 0) {
+      timerEl.textContent = "Code expired";
+      clearInterval(otpInterval);
+      return;
+    }
+    const mins = Math.floor(diff / 60000);
+    const secs = Math.floor((diff % 60000) / 1000);
+    timerEl.textContent = `Code expires in ${mins}:${secs.toString().padStart(2,"0")}`;
+  }, 1000);
+}
+
+// When lock countdown starts, clear OTP interval
+function startLockCountdown(seconds) {
+  if (otpInterval) clearInterval(otpInterval); // stop OTP countdown
+
+  if (!seconds || isNaN(seconds)) seconds = 60;
+
+  const end = Date.now() + seconds * 1000;
+
+  const lockInterval = setInterval(() => {
+    const diff = end - Date.now();
+
+    if (diff <= 0) {
+      clearInterval(lockInterval);
+      location.reload();
+      return;
+    }
+
+    const mins = Math.floor(diff / 60000);
+    const secs = Math.floor((diff % 60000) / 1000);
+    timerEl.textContent = `Too many attempts. Try again in ${mins}:${secs.toString().padStart(2,"0")}`;
+  }, 1000);
+}
+
+
+// -------------------------
+// OTP Input Logic
+// -------------------------
+inputs[0].focus();
+
+inputs.forEach((input, i) => {
+  input.addEventListener("input", () => {
+    input.value = input.value.replace(/\D/g, "");
+
+    if (input.value && inputs[i + 1]) inputs[i + 1].focus();
+    checkComplete();
+  });
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Backspace" && !input.value && inputs[i - 1]) {
+      inputs[i - 1].focus();
+    }
+  });
+
+  input.addEventListener("paste", (e) => {
+    const paste = (e.clipboardData || window.clipboardData)
+      .getData("text")
+      .replace(/\D/g, "")
+      .slice(0, 6);
+
+    if (!paste) return;
+
+    e.preventDefault();
+    paste.split("").forEach((char, idx) => {
+      if (inputs[idx]) inputs[idx].value = char;
+    });
+
+    checkComplete();
+  });
+});
+
+// -------------------------
+// Check if all 6 digits are entered
+// -------------------------
+function checkComplete() {
+  const code = [...inputs].map(i => i.value).join("");
+  if (code.length === 6) submitCode(code);
+}
+
+// -------------------------
+// Submit OTP
+// -------------------------
+async function submitCode(code) {
+  verifyBtn.disabled = true;
+  msgDiv.textContent = "Verifying…";
+
+  try {
+    const res = await fetch("/api/verify-code", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, code })
+    });
+
+    const data = await res.json();
+
+    if (data.locked) {
+      startLockCountdown(data.retry_after);
+      verifyBtn.disabled = true;
+      return;
+    }
+
+    if (data.error) {
+      boxWrap.classList.add("error");
+      msgDiv.textContent = "❌ " + data.error;
+      verifyBtn.disabled = false;
+      setTimeout(() => boxWrap.classList.remove("error"), 600);
+      inputs.forEach(i => i.value = "");
+      inputs[0].focus();
+      return;
+    }
+
+    // ✅ Success
+    localStorage.setItem("cdx_user", JSON.stringify(data.user));
+    window.location.href = "/";
+  } catch (err) {
+    console.error(err);
+    msgDiv.textContent = "Server error, try again.";
+    verifyBtn.disabled = false;
+  }
+}
+
+// -------------------------
+// Manual Button Click
+// -------------------------
+verifyBtn.onclick = () => {
+  const code = [...inputs].map(i => i.value).join("");
+  if (code.length === 6) submitCode(code);
+};
+</script>
+
+
+
+</body>
+</html>

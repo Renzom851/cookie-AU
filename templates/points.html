@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Cookie DEX AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
+</head>
+
+<body class="dark-page">
+
+  <div class="points-page">
+
+    <button class="back-btn" onclick="location.href='/'">← Back</button>
+
+    <div class="points-card">
+      <h1>🪙 Your Points</h1>
+      <div class="points-value">{{ points }}</div>
+      <p class="points-sub">Earn points by using Cookie DEX AI</p>
+    </div>
+
+    <div class="daily-card">
+      <h2>🔥 Daily Session</h2>
+
+      <div class="progress-wrap">
+        <div class="progress-bar">
+          <div class="progress-fill"
+               style="width: {{ (daily_usage / 60 * 100) | round(0) }}%">
+          </div>
+        </div>
+        <div class="progress-text">
+          {{ daily_usage }}/60 usage
+        </div>
+      </div>
+
+      <div class="streak-box">
+        <span>Daily Streak</span>
+        <strong>🔥 {{ daily_streak }} days</strong>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>
